@@ -1,16 +1,5 @@
-# Dependencies
 node_modules/
-
-# Environment files (NEVER push these!)
 .env
-
-# Build output
-frontend/dist/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
+dist/
+build/
 .vscode/
-.idea/
