@@ -27,6 +27,10 @@ const testResultSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    submitted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

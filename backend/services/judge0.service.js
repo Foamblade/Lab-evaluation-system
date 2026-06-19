@@ -6,6 +6,23 @@ const langMap = require('../utils/langMap');
 const JUDGE0_URL = process.env.JUDGE0_URL || 'https://judge0-ce.p.rapidapi.com';
 const JUDGE0_KEY = process.env.JUDGE0_KEY || '';
 
+/**
+ * Normalize output for comparison:
+ * - Replace \r\n with \n
+ * - Trim trailing whitespace from each line
+ * - Remove trailing empty lines
+ */
+const normalizeOutput = (str) => {
+  if (!str) return '';
+  return str
+    .replace(/\r\n/g, '\n')  // Windows → Unix line endings
+    .replace(/\r/g, '\n')     // Old Mac → Unix line endings
+    .split('\n')
+    .map((line) => line.trimEnd())  // trim trailing spaces per line
+    .join('\n')
+    .trim();  // remove leading/trailing empty lines
+};
+
 // Headers for Judge0 (RapidAPI hosted)
 const getHeaders = () => {
   const headers = { 'Content-Type': 'application/json' };
@@ -137,8 +154,8 @@ const runTestCase = async (code, language, testCase, timeLimit, memoryLimit) => 
     }
 
     // Status 3 or 4 — compare output
-    const actualOutput = result.stdout.trim();
-    const expectedOutput = testCase.expectedOutput.trim();
+    const actualOutput = normalizeOutput(result.stdout);
+    const expectedOutput = normalizeOutput(testCase.expectedOutput);
     const passed = actualOutput === expectedOutput;
 
     return {

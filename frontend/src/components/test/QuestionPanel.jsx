@@ -58,7 +58,7 @@ export default function QuestionPanel({ question, questionIndex = 0, totalQuesti
       {/* Description */}
       <div style={styles.section}>
         <div style={styles.descContent}>
-          {question.description.split('\n').map((para, i) => (
+          {(question.description || 'No description provided.').split('\n').map((para, i) => (
             <p key={i} style={styles.paragraph}>
               {para || <br />}
             </p>

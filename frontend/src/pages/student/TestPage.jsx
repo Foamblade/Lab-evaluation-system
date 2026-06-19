@@ -1,5 +1,4 @@
-// ✅ DONE — Phase 6: Test Page (connected to API — real Judge0 submission)
-// QuestionPanel (left) | CodeEditor + OutputPanel (right)
+// ✅ FIXED — TestPage with Submit Test button + already-submitted check
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '../../api/axiosInstance.js';
@@ -20,26 +19,10 @@ export default function TestPage() {
   const { testId } = useParams();
   const navigate = useNavigate();
 
-  // API state
+  // ALL hooks at the top
   const [test, setTest] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // Fetch test from API
-  useEffect(() => {
-    const fetchTest = async () => {
-      try {
-        const res = await axiosInstance.get(`/tests/${testId}`);
-        setTest(res.data);
-      } catch {
-        setTest(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTest();
-  }, [testId]);
-
-  // Question navigation
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [activeQ, setActiveQ] = useState(0);
   const [codeMap, setCodeMap] = useState({});
   const [langMap, setLangMap] = useState({});
@@ -47,8 +30,31 @@ export default function TestPage() {
   const [leftWidth, setLeftWidth] = useState(35);
   const [bottomHeight, setBottomHeight] = useState(35);
   const [submitting, setSubmitting] = useState(false);
+  const [submitTestLoading, setSubmitTestLoading] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
-  // Initialize code/lang/output maps once test loads
+  // Fetch test + check if already submitted
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [testRes, checkRes] = await Promise.all([
+          axiosInstance.get(`/tests/${testId}`),
+          axiosInstance.get(`/submissions/check-submitted/${testId}`),
+        ]);
+        setTest(testRes.data);
+        if (checkRes.data.submitted) {
+          setAlreadySubmitted(true);
+        }
+      } catch {
+        setTest(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [testId]);
+
+  // Initialize maps when test loads
   useEffect(() => {
     if (!test?.questions) return;
     const cm = {}, lm = {}, om = {};
@@ -62,55 +68,37 @@ export default function TestPage() {
     setOutputMap(om);
   }, [test]);
 
-  if (loading) {
-    return (
-      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-          <div style={{ width: '24px', height: '24px', border: '3px solid var(--border-default)', borderTopColor: 'var(--accent-blue)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <p>Loading test...</p>
-        </div>
-      </div>
-    );
-  }
+  // Derived values
+  const questions = test?.questions || [];
+  const currentQ = questions[activeQ] || null;
+  const currentCode = currentQ ? (codeMap[currentQ._id] || DEFAULT_CODE.python) : '';
+  const currentLang = currentQ ? (langMap[currentQ._id] || 'python') : 'python';
+  const currentOutput = currentQ ? (outputMap[currentQ._id] || { status: 'idle' }) : { status: 'idle' };
+  const endTime = test ? new Date(test.startTime).getTime() + test.duration * 60000 : Date.now();
 
-  if (!test || !test.questions?.length) {
-    return (
-      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
-          <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px' }}>Test not found or no questions</p>
-          <Button variant="secondary" onClick={() => navigate('/student/dashboard')}>← back</Button>
-        </div>
-      </div>
-    );
-  }
-
-  const endTime = new Date(test.startTime).getTime() + test.duration * 60000;
-  const currentQ = test.questions[activeQ];
-  if (!currentQ) return null;
-
-  const currentCode = codeMap[currentQ._id] || DEFAULT_CODE.python;
-  const currentLang = langMap[currentQ._id] || 'python';
-  const currentOutput = outputMap[currentQ._id] || { status: 'idle' };
-
-  const handleCodeChange = (val) => {
+  const handleCodeChange = useCallback((val) => {
+    if (!currentQ) return;
     setCodeMap((prev) => ({ ...prev, [currentQ._id]: val }));
-  };
+  }, [currentQ?._id]);
 
-  const handleLangChange = (lang) => {
+  const handleLangChange = useCallback((lang) => {
+    if (!currentQ) return;
     setLangMap((prev) => ({ ...prev, [currentQ._id]: lang }));
-  };
+  }, [currentQ?._id]);
 
-  const handleClearOutput = () => {
+  const handleClearOutput = useCallback(() => {
+    if (!currentQ) return;
     setOutputMap((prev) => ({ ...prev, [currentQ._id]: { status: 'idle' } }));
-  };
+  }, [currentQ?._id]);
 
-  // Real submit — POST /api/submissions
-  const handleSubmit = async () => {
+  // Helper to execute code against an endpoint and update output
+  const executeCode = useCallback(async (endpoint) => {
+    if (!currentQ || submitting) return;
     setSubmitting(true);
     setOutputMap((prev) => ({ ...prev, [currentQ._id]: { status: 'running' } }));
 
     try {
-      const res = await axiosInstance.post('/submissions', {
+      const res = await axiosInstance.post(endpoint, {
         testId: test._id,
         questionId: currentQ._id,
         code: codeMap[currentQ._id] || '',
@@ -131,15 +119,13 @@ export default function TestPage() {
         },
       }));
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Submission failed';
+      const msg = err.response?.data?.message || err.message || 'Failed';
       setOutputMap((prev) => ({
         ...prev,
         [currentQ._id]: {
           status: 'success',
           verdict: 'RE',
           score: 0,
-          executionTime: 0,
-          memoryUsed: 0,
           compileError: msg,
           testResults: [],
         },
@@ -147,38 +133,132 @@ export default function TestPage() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [currentQ?._id, submitting, test?._id, codeMap, langMap]);
 
-  // Keydown handler: Ctrl+Enter = submit
-  const handleKeyDown = useCallback((e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleSubmit();
+  // Run code — evaluate against sample cases only, NOT saved to DB
+  const handleRun = useCallback(() => executeCode('/submissions/run'), [executeCode]);
+
+  // Submit code — evaluate against ALL cases, SAVED to DB (visible to admin)
+  const handleSubmit = useCallback(() => executeCode('/submissions'), [executeCode]);
+
+  // Submit entire test (finalize — no more attempts)
+  const handleSubmitTest = useCallback(async () => {
+    setSubmitTestLoading(true);
+    try {
+      await axiosInstance.post('/submissions/submit-test', { testId: test._id });
+      setAlreadySubmitted(true);
+      setShowSubmitConfirm(false);
+      navigate(`/student/result/${test._id}`);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to submit test');
+    } finally {
+      setSubmitTestLoading(false);
     }
-  }, [currentQ?._id, submitting]);
+  }, [test?._id, navigate]);
 
+  // Ctrl+Enter shortcut
   useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSubmit();
+      }
+    };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+  }, [handleSubmit]);
 
   const handleTimeExpire = useCallback(() => {
-    alert('Time is up! Your last submissions have been saved.');
+    // Auto-submit test when time expires
+    axiosInstance.post('/submissions/submit-test', { testId }).catch(() => {});
+    alert('Time is up! Your test has been submitted.');
     navigate('/student/dashboard');
-  }, [navigate]);
+  }, [navigate, testId]);
+
+  // ── RENDER ──────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div style={{ width: '24px', height: '24px', border: '3px solid var(--border-default)', borderTopColor: 'var(--accent-blue)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <p>Loading test...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Already submitted — redirect to results
+  if (alreadySubmitted) {
+    return (
+      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', maxWidth: '400px' }}>
+          <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '16px' }}>🔒</span>
+          <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>Test Already Submitted</p>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '24px', fontStyle: 'italic' }}>
+            // you have already finalized this test. No more attempts allowed.
+          </p>
+          <Button onClick={() => navigate(`/student/result/${testId}`)}>viewResults()</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!test || questions.length === 0) {
+    return (
+      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
+          <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px' }}>Test not found or no questions</p>
+          <Button variant="secondary" onClick={() => navigate('/student/dashboard')}>← back</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentQ) {
+    return (
+      <div style={{ ...styles.page, alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
+          <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px' }}>Question not found</p>
+          <Button variant="secondary" onClick={() => navigate('/student/dashboard')}>← back</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.page}>
+      {/* Submit Test Confirmation Modal */}
+      {showSubmitConfirm && (
+        <div style={styles.modalOverlay} onClick={() => setShowSubmitConfirm(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '12px' }}>⚠️</span>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Submit Test?
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6 }}>
+              Once you submit, you <strong style={{ color: 'var(--accent-red)' }}>cannot reattempt</strong> this test.
+              Your best scores for each question will be saved.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <Button variant="secondary" onClick={() => setShowSubmitConfirm(false)}>cancel()</Button>
+              <Button variant="danger" onClick={handleSubmitTest} loading={submitTestLoading}>
+                confirmSubmit()
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top bar */}
       <div style={styles.topBar}>
         <div style={styles.topLeft}>
-          <button onClick={() => navigate('/student/dashboard')} style={styles.exitBtn} id="exit-test-btn">← exit</button>
           <span style={styles.testTitle}>{test.title}</span>
         </div>
 
         {/* Question tabs */}
         <div style={styles.qTabs}>
-          {test.questions.map((q, i) => {
+          {questions.map((q, i) => {
             const qOutput = outputMap[q._id];
             const hasResult = qOutput?.status === 'success';
             const isAC = hasResult && qOutput?.verdict === 'AC';
@@ -201,18 +281,21 @@ export default function TestPage() {
         </div>
 
         <div style={styles.topRight}>
-          <Timer targetTime={endTime} onExpire={handleTimeExpire} size="sm" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Timer targetTime={endTime} onExpire={handleTimeExpire} size="sm" />
+            <button onClick={() => setShowSubmitConfirm(true)} style={styles.submitTestBtn} id="submit-test-btn">
+              🏁 Submit Test
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main content: split layout */}
+      {/* Main content */}
       <div style={styles.mainContent}>
-        {/* Left — Question Panel */}
         <div style={{ ...styles.leftPanel, width: `${leftWidth}%` }}>
-          <QuestionPanel question={currentQ} questionIndex={activeQ} totalQuestions={test.questions.length} />
+          <QuestionPanel question={currentQ} questionIndex={activeQ} totalQuestions={questions.length} />
         </div>
 
-        {/* Divider */}
         <div
           style={styles.vDivider}
           onMouseDown={(e) => {
@@ -221,8 +304,7 @@ export default function TestPage() {
             const startWidth = leftWidth;
             const onMove = (ev) => {
               const delta = ((ev.clientX - startX) / window.innerWidth) * 100;
-              const newWidth = Math.min(60, Math.max(20, startWidth + delta));
-              setLeftWidth(newWidth);
+              setLeftWidth(Math.min(60, Math.max(20, startWidth + delta)));
             };
             const onUp = () => {
               document.removeEventListener('mousemove', onMove);
@@ -233,7 +315,6 @@ export default function TestPage() {
           }}
         />
 
-        {/* Right — Editor + Output */}
         <div style={{ ...styles.rightPanel, width: `${100 - leftWidth}%` }}>
           <div style={{ ...styles.editorArea, height: `${100 - bottomHeight}%` }}>
             <CodeEditor
@@ -244,7 +325,6 @@ export default function TestPage() {
             />
           </div>
 
-          {/* Horizontal divider */}
           <div
             style={styles.hDivider}
             onMouseDown={(e) => {
@@ -255,8 +335,7 @@ export default function TestPage() {
               const onMove = (ev) => {
                 const containerH = container.getBoundingClientRect().height;
                 const delta = ((startY - ev.clientY) / containerH) * 100;
-                const newH = Math.min(60, Math.max(15, startH + delta));
-                setBottomHeight(newH);
+                setBottomHeight(Math.min(60, Math.max(15, startH + delta)));
               };
               const onUp = () => {
                 document.removeEventListener('mousemove', onMove);
@@ -267,9 +346,9 @@ export default function TestPage() {
             }}
           >
             <div style={styles.submitBar}>
-              <Button variant="secondary" size="sm" onClick={handleSubmit} loading={submitting} id="run-code-btn">▶ run()</Button>
+              <Button variant="secondary" size="sm" onClick={handleRun} loading={submitting} id="run-code-btn">▶ run()</Button>
               <Button size="sm" onClick={handleSubmit} loading={submitting} id="submit-code-btn">submit()</Button>
-              <span style={styles.kbShortcut}>Ctrl+Enter</span>
+              <span style={styles.kbShortcut}>Ctrl+Enter = submit</span>
             </div>
           </div>
 
@@ -286,7 +365,7 @@ const styles = {
   page: { height: 'calc(100vh - var(--navbar-height))', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   topBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '8px 16px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-default)', flexShrink: 0, minHeight: '48px' },
   topLeft: { display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 },
-  exitBtn: { background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)', padding: '5px 12px', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', fontWeight: 500, cursor: 'pointer', flexShrink: 0, transition: 'all 150ms ease' },
+  exitBtn: { background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)', padding: '5px 12px', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', fontWeight: 500, cursor: 'pointer', flexShrink: 0 },
   testTitle: { fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   qTabs: { display: 'flex', gap: '4px', flexShrink: 0 },
   qTab: { padding: '5px 12px', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'all 150ms ease' },
@@ -294,13 +373,29 @@ const styles = {
   qTabAC: { color: 'var(--accent-green-bright)', borderColor: 'rgba(63, 185, 80, 0.3)' },
   qTabWA: { color: 'var(--accent-orange)', borderColor: 'rgba(240, 136, 62, 0.3)' },
   topRight: { flexShrink: 0 },
+  submitTestBtn: {
+    padding: '6px 16px', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+    color: '#fff', background: 'var(--accent-red)', border: 'none',
+    borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 150ms ease',
+    whiteSpace: 'nowrap',
+  },
   mainContent: { flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 },
   leftPanel: { background: 'var(--bg-card)', borderRight: '1px solid var(--border-default)', overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0 },
-  vDivider: { width: '5px', background: 'var(--bg-primary)', cursor: 'col-resize', flexShrink: 0, transition: 'background 150ms ease', position: 'relative' },
+  vDivider: { width: '5px', background: 'var(--bg-primary)', cursor: 'col-resize', flexShrink: 0 },
   rightPanel: { display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 },
   editorArea: { overflow: 'hidden', flexShrink: 0 },
-  hDivider: { height: 'auto', background: 'var(--bg-card)', cursor: 'row-resize', flexShrink: 0, borderTop: '1px solid var(--border-default)', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px', position: 'relative' },
+  hDivider: { height: 'auto', background: 'var(--bg-card)', cursor: 'row-resize', flexShrink: 0, borderTop: '1px solid var(--border-default)', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px' },
   submitBar: { display: 'flex', alignItems: 'center', gap: '8px' },
   kbShortcut: { fontSize: '0.6rem', color: 'var(--text-muted)', padding: '2px 8px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-default)', fontFamily: 'var(--font-mono)' },
   outputArea: { overflow: 'hidden', flexShrink: 0 },
+  // Modal styles
+  modalOverlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+  },
+  modal: {
+    background: 'var(--bg-card)', border: '1px solid var(--border-default)',
+    borderRadius: 'var(--radius-xl)', padding: '36px 32px', maxWidth: '420px',
+    width: '90%', textAlign: 'center', boxShadow: 'var(--shadow-lg)',
+  },
 };

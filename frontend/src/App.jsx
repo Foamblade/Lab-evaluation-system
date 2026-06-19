@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext.jsx';
 // Layout
 import Navbar from './components/layout/Navbar.jsx';
 import ProtectedRoute from './components/layout/ProtectedRoute.jsx';
+import ErrorBoundary from './components/layout/ErrorBoundary.jsx';
 
 // Auth Pages — ✅ Phase 1
 import LoginPage from './pages/auth/LoginPage.jsx';
@@ -65,6 +66,7 @@ export default function App() {
     <>
       {user && <Navbar />}
       <main style={{ paddingTop: user ? 'var(--navbar-height)' : 0, flex: 1 }}>
+        <ErrorBoundary>
         <Routes>
           {/* Root */}
           <Route path="/" element={<RootRedirect />} />
@@ -120,6 +122,7 @@ export default function App() {
           {/* 404 fallback */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </ErrorBoundary>
       </main>
     </>
   );

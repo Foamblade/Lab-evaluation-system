@@ -65,7 +65,7 @@ const getTestById = async (req, res) => {
       const sanitized = test.toObject();
       sanitized.questions = sanitized.questions.map((q) => ({
         ...q,
-        testCases: q.testCases.filter((tc) => !tc.isHidden),
+        testCases: (q.testCases || []).filter((tc) => !tc.isHidden),
       }));
       return res.json(sanitized);
     }

@@ -184,28 +184,46 @@ export default function CreateTestPage() {
                   const isSelected = selectedQuestions.includes(q._id);
                   const dc = DIFFICULTY_COLORS[q.difficulty] || DIFFICULTY_COLORS.medium;
                   return (
-                    <div key={q._id} onClick={() => toggleQuestion(q._id)}
+                    <div key={q._id}
                       style={{
                         ...styles.questionItem,
                         borderColor: isSelected ? 'var(--accent-blue)' : 'var(--border-default)',
                         background: isSelected ? 'var(--accent-blue-dim)' : 'var(--bg-primary)',
                       }}
-                      id={`question-select-${q._id}`}
                     >
-                      <div style={styles.questionCheckbox}>
-                        <span style={{
-                          ...styles.checkIcon,
-                          background: isSelected ? 'var(--accent-blue)' : 'transparent',
-                          borderColor: isSelected ? 'var(--accent-blue)' : 'var(--border-default)',
-                          color: isSelected ? '#fff' : 'transparent',
-                        }}>✓</span>
+                      <div onClick={() => toggleQuestion(q._id)} style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, cursor: 'pointer' }}>
+                        <div style={styles.questionCheckbox}>
+                          <span style={{
+                            ...styles.checkIcon,
+                            background: isSelected ? 'var(--accent-blue)' : 'transparent',
+                            borderColor: isSelected ? 'var(--accent-blue)' : 'var(--border-default)',
+                            color: isSelected ? '#fff' : 'transparent',
+                          }}>✓</span>
+                        </div>
+                        <div style={styles.questionInfo}>
+                          <span style={styles.questionTitle}>{q.title}</span>
+                        </div>
+                        <span style={{ ...styles.diffBadge, color: dc.color, background: dc.bg }}>
+                          {q.difficulty}
+                        </span>
                       </div>
-                      <div style={styles.questionInfo}>
-                        <span style={styles.questionTitle}>{q.title}</span>
-                      </div>
-                      <span style={{ ...styles.diffBadge, color: dc.color, background: dc.bg }}>
-                        {q.difficulty}
-                      </span>
+                      <button
+                        type="button"
+                        title="Delete question"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!window.confirm(`Delete "${q.title}"? This cannot be undone.`)) return;
+                          axiosInstance.delete(`/questions/${q._id}`)
+                            .then(() => {
+                              setQuestions((prev) => prev.filter((qItem) => qItem._id !== q._id));
+                              setSelectedQuestions((prev) => prev.filter((id) => id !== q._id));
+                            })
+                            .catch((err) => alert(err.response?.data?.message || 'Failed to delete'));
+                        }}
+                        style={styles.deleteBtn}
+                      >
+                        🗑
+                      </button>
                     </div>
                   );
                 })}
@@ -252,5 +270,10 @@ const styles = {
   questionTitle: { fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)' },
   diffBadge: { fontSize: '0.65rem', fontWeight: 700, padding: '3px 10px', borderRadius: 'var(--radius-full)', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 },
   closingBrace: { fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '16px' },
+  deleteBtn: {
+    background: 'transparent', border: '1px solid rgba(248, 81, 73, 0.2)', color: 'var(--accent-red)',
+    borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: '0.8rem', cursor: 'pointer',
+    transition: 'all 150ms ease', flexShrink: 0, lineHeight: 1,
+  },
   submitRow: { display: 'flex', justifyContent: 'flex-end', gap: '12px' },
 };
