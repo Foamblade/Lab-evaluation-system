@@ -1,4 +1,4 @@
-# LabEvo 🚀
+# LabEval 🚀
 
 LabEvo is a full-stack online coding assessment platform that allows administrators to create coding tests and evaluate student submissions automatically using Judge0.
 
