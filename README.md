@@ -83,69 +83,6 @@ LabEvo/
 └── README.md
 ```
 
----
-
-## Installation
-
-### Clone Repository
-
-```bash
-git clone https://github.com/Foamblade/Lab-evaluation-system.git
-cd LabEvo
-```
-
----
-
-## Backend Setup
-
-```bash
-cd backend
-npm install
-```
-
-Create a `.env` file:
-
-```env
-PORT=5000
-
-MONGODB_URI=your_mongodb_connection_string
-
-JWT_SECRET=your_jwt_secret
-
-JUDGE0_API_URL=your_judge0_endpoint
-JUDGE0_API_KEY=your_judge0_api_key
-```
-
-Start backend:
-
-```bash
-npm run dev
-```
-
----
-
-## Frontend Setup
-
-```bash
-cd frontend
-npm install
-```
-
-Create a `.env` file:
-
-```env
-VITE_API_URL=http://localhost:5000/api
-```
-
-Start frontend:
-
-```bash
-npm run dev
-```
-
----
-
-## API Modules
 
 ### Authentication
 - Login
@@ -201,13 +138,6 @@ npm run dev
 - AI-based code feedback
 - Detailed analytics dashboard
 
----
-
-## Screenshots
-
-Add screenshots here after deployment.
-
----
 
 ## Author
 
