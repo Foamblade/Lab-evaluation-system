@@ -90,7 +90,7 @@ LabEvo/
 ### Clone Repository
 
 ```bash
-git clone https://github.com/<your-username>/LabEvo.git
+git clone https://github.com/Foamblade/Lab-evaluation-system.git
 cd LabEvo
 ```
 
